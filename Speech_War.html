@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sengoku Auto Battler - Campaign Mode</title>
+    <style>
+        :root {
+            --primary: #3498db;
+            --danger: #e74c3c;
+            --boss: #c0392b;
+            --bg-grass: #a8e6cf;
+            --ui-bg: rgba(44, 62, 80, 0.95);
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #2c3e50;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            font-family: 'Hiragino Maru Gothic ProN', 'Rounded M+ 1c', sans-serif;
+            overflow: hidden;
+        }
+        #game-container {
+            position: relative;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            border-radius: 12px;
+            overflow: hidden;
+            background-color: var(--bg-grass);
+            width: 800px;
+            height: 450px;
+        }
+        canvas {
+            display: block;
+        }
+        .btn {
+            background-color: #f1c40f;
+            color: #333;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            transition: transform 0.1s, background-color 0.2s;
+        }
+        .btn:hover { background-color: #f39c12; transform: translateY(-2px); }
+        .btn:active { transform: translateY(2px); }
+        .btn:disabled { background-color: #95a5a6; cursor: not-allowed; transform: none; }
+
+        #wave-info {
+            position: absolute;
+            top: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0,0,0,0.5);
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 18px;
+        }
+
+        /* Loading Screen */
+        #loading-screen {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-color: #2c3e50;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            z-index: 200; color: white;
+        }
+        .loader {
+            border: 6px solid #f3f3f3; border-top: 6px solid var(--primary); border-radius: 50%;
+            width: 50px; height: 50px; animation: spin 1s linear infinite; margin-bottom: 20px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* --- Campaign Mode UI --- */
+        .novel-ui-container {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: var(--ui-bg);
+            display: none; flex-direction: column;
+            z-index: 100; color: white;
+        }
+
+        /* Select General Phase */
+        .select-general-ui {
+            display: flex; justify-content: space-around; align-items: center; height: 100%; padding: 0 20px;
+        }
+        .general-card {
+            background: rgba(255,255,255,0.1); padding: 20px; border-radius: 15px;
+            text-align: center; cursor: pointer; width: 35%; border: 2px solid transparent;
+            transition: all 0.2s;
+        }
+        .general-card:hover { transform: scale(1.05); border-color: #f1c40f; background: rgba(255,255,255,0.2); }
+        .general-card img { width: 120px; height: 120px; border-radius: 50%; border: 3px solid #ccc; object-fit: cover; background: #fff;}
+        .general-card h3 { margin: 10px 0; color: #f1c40f; }
+        .general-card p { font-size: 14px; line-height: 1.5; margin: 0; color: #ecf0f1; }
+
+        /* Conversation Phase */
+        .novel-content { flex: 1; display: flex; padding: 20px; box-sizing: border-box; overflow: hidden; }
+        .character-area {
+            flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+            border-right: 1px solid rgba(255,255,255,0.2); padding-right: 20px;
+        }
+        .character-img { width: 140px; height: 140px; border-radius: 50%; border: 4px solid var(--primary); object-fit: cover; background: #fff; }
+        .character-info { margin-top: 15px; width: 100%; }
+        .memory-box {
+            font-size: 13px; text-align: left; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 8px; margin-top: 10px;
+            color: #bdc3c7; height: 60px; overflow-y: auto;
+        }
+        .log-area {
+            flex: 2; background: rgba(0,0,0,0.3); border-radius: 8px; padding: 15px; margin-left: 20px;
+            overflow-y: auto; display: flex; flex-direction: column; gap: 10px;
+        }
+        .log-entry { padding: 12px; border-radius: 8px; font-size: 15px; line-height: 1.4; }
+        .log-player { background: rgba(52, 152, 219, 0.4); align-self: flex-end; width: 85%; border-bottom-right-radius: 0; }
+        .log-general { background: rgba(46, 204, 113, 0.4); align-self: flex-start; width: 85%; border-bottom-left-radius: 0; }
+
+        .input-area {
+            height: 120px; padding: 15px 20px; background: #34495e; display: flex; gap: 15px; border-top: 1px solid #2c3e50;
+        }
+        .input-area textarea {
+            flex: 1; height: 100%; font-size: 16px; padding: 10px; border-radius: 8px; border: 2px solid #7f8c8d;
+            box-sizing: border-box; resize: none; background: #ecf0f1; color: #2c3e50;
+        }
+        .input-area textarea:focus { outline: none; border-color: var(--primary); }
+        .action-buttons { display: flex; flex-direction: column; gap: 10px; width: 150px; }
+        .action-buttons .btn { flex: 1; width: 100%; padding: 0; }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas" width="800" height="450"></canvas>
+    
+    <div id="loading-screen">
+        <div class="loader"></div>
+        <h2 id="loading-text">Loading Image Assets...</h2>
+    </div>
+
+    <div id="wave-info">Wave 1 - 0:00</div>
+
+    <!-- --- Campaign UI Container --- -->
+    <div id="phase-ui-container" class="novel-ui-container">
+        
+        <!-- 1. Select General Phase -->
+        <div id="ui-select-general" class="select-general-ui">
+            <h2 style="position: absolute; top: 20px; width: 100%; text-align: center; margin: 0;">Choose a General to fight alongside you</h2>
+            
+            <div class="general-card" onclick="selectGeneral('hotblooded')">
+                <img id="sel-img-hot" src="" alt="Hot-blooded">
+                <h3>Kotaro Sanada</h3>
+                <p>Hot-blooded rookie. Energetic but reckless. Shows great potential when inspired.</p>
+            </div>
+            
+            <div class="general-card" onclick="selectGeneral('veteran')">
+                <img id="sel-img-vet" src="" alt="Veteran">
+                <h3>Kanbei Kuroda</h3>
+                <p>Calm veteran. Cautious, sometimes pessimistic. Excels at solid defense.</p>
+            </div>
+        </div>
+
+        <!-- 2. Conversation Phase -->
+        <div id="ui-conversation" style="display: none; height: 100%; flex-direction: column;">
+            <div class="novel-content">
+                <div class="character-area">
+                    <img id="conv-char-img" class="character-img" src="" alt="">
+                    <div class="character-info">
+                        <h3 id="conv-char-name" style="margin: 0 0 5px 0; text-align: center; color: #f1c40f;"></h3>
+                        <p id="conv-char-personality" style="font-size: 12px; margin: 0 0 10px 0; text-align: center;"></p>
+                        <div class="memory-box">
+                            <b style="color: #fff;">[General's Memory]</b><br>
+                            <span id="conv-char-memory">None</span>
+                        </div>
+                    </div>
+                </div>
+                <div id="conv-log-area" class="log-area">
+                    <!-- Conversation logs will be added here -->
+                </div>
+            </div>
+            <div class="input-area">
+                <textarea id="conv-input" placeholder="Enter your words, General..."></textarea>
+                <div class="action-buttons">
+                    <button id="conv-submit-btn" class="btn" onclick="submitConversation()">Speak</button>
+                    <button id="conv-next-btn" class="btn" style="display: none; background-color: var(--danger); color: white;" onclick="goToNextPhase()">Next</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const waveInfo = document.getElementById('wave-info');
+
+    // --- Game State (Campaign Mode) ---
+    const GameState = {
+        // Campaign / State Management
+        currentPhase: 'LOADING', 
+        nextPhaseTarget: '',
+        generalMemory: '',
+        selectedGeneral: null,
+        
+        // Battle Management
+        units: [],
+        damageTexts: [],
+        isPaused: true,
+        gameTime: 0,
+        lastTimestamp: 0,
+        wave: 1,
+        gameStatus: 'selecting',
+        currentTactic: 'NORMAL',
+        currentBuffs: { atkMult: 1.0, spdMult: 1.0, defBuff: 0, buffType: null }
+    };
+
+    // General Data Definition
+    const GENERALS = {
+        hotblooded: {
+            id: 'hotblooded',
+            name: 'Kotaro Sanada',
+            personality: '[Personality] Hot-blooded rookie. Energetic but reckless.',
+            faceBrave: 'hotblooded_happy',
+            faceScared: 'hotblooded_sad'
+        },
+        veteran: {
+            id: 'veteran',
+            name: 'Kanbei Kuroda',
+            personality: '[Personality] Calm veteran. Cautious, sometimes pessimistic.',
+            faceBrave: 'veteran_happy',
+            faceScared: 'veteran_sad'
+        }
+    };
+
+    // --- Image Asset Management ---
+    const Assets = {
+        bg: new Image(), ally: new Image(), enemy: new Image(), boss: new Image(),
+        hotblooded_happy: new Image(), hotblooded_sad: new Image(),
+        veteran_happy: new Image(), veteran_sad: new Image()
+    };
+
+    async function loadAssets() {
+        const loadImg = (src, targetProp) => {
+            return new Promise(resolve => {
+                Assets[targetProp].onload = resolve;
+                Assets[targetProp].onerror = resolve; 
+                Assets[targetProp].src = src;
+            });
+        };
+
+        await Promise.all([
+            loadImg('assets/background.png', 'bg'),
+            loadImg('assets/samurai.png', 'ally'),
+            loadImg('assets/ninja.png', 'enemy'),
+            loadImg('assets/boss.png', 'boss'),
+            loadImg('assets/hotblooded_happy.png', 'hotblooded_happy'),
+            loadImg('assets/hotblooded_sad.png', 'hotblooded_sad'),
+            loadImg('assets/veteran_happy.png', 'veteran_happy'),
+            loadImg('assets/veteran_sad.png', 'veteran_sad')
+        ]);
+        
+        document.getElementById('loading-screen').style.display = 'none';
+        
+        // Set images for the selection screen
+        document.getElementById('sel-img-hot').src = Assets.hotblooded_happy.src;
+        document.getElementById('sel-img-vet').src = Assets.veteran_happy.src;
+        
+        // Go to selection phase after loading
+        changePhase('SELECT_GENERAL');
+    }
+
+    // --- Campaign Phase Progression Logic ---
+    function changePhase(newPhase) {
+        GameState.currentPhase = newPhase;
+        
+        const uiContainer = document.getElementById('phase-ui-container');
+        const uiSelect = document.getElementById('ui-select-general');
+        const uiConv = document.getElementById('ui-conversation');
+        
+        // Hide everything first
+        uiContainer.style.display = 'flex';
+        uiSelect.style.display = 'none';
+        uiConv.style.display = 'none';
+        GameState.isPaused = true;
+        
+        if (newPhase === 'SELECT_GENERAL') {
+            uiSelect.style.display = 'flex';
+        } 
+        else if (newPhase.includes('PRE_') || newPhase.includes('POST_')) {
+            uiConv.style.display = 'flex';
+            setupConversationPhase(newPhase);
+        }
+        else if (newPhase === 'BATTLE_1') {
+            uiContainer.style.display = 'none'; // Hide campaign UI and show Canvas
+            startBattle(1);
+        }
+        else if (newPhase === 'BATTLE_2') {
+            uiContainer.style.display = 'none';
+            startBattle(2);
+        }
+        else if (newPhase === 'RESULT') {
+            uiContainer.style.display = 'none';
+            GameState.isPaused = false;
+            GameState.gameStatus = 'win';
+        }
+    }
+
+    // Select General
+    window.selectGeneral = function(generalId) {
+        GameState.selectedGeneral = GENERALS[generalId];
+        GameState.generalMemory = ""; // Reset memory
+        changePhase('PRE_BATTLE_1');
+    };
+
+    // Initialize Conversation Phase
+    function setupConversationPhase(phase) {
+        const gen = GameState.selectedGeneral;
+        
+        // Update general information display
+        document.getElementById('conv-char-img').src = Assets[gen.faceBrave].src; // Default to brave face
+        document.getElementById('conv-char-name').innerText = gen.name;
+        document.getElementById('conv-char-personality').innerText = gen.personality;
+        document.getElementById('conv-char-memory').innerText = GameState.generalMemory || "None";
+        
+        // Clear and initialize logs
+        document.getElementById('conv-log-area').innerHTML = '';
+        document.getElementById('conv-input').value = '';
+        document.getElementById('conv-input').disabled = false;
+        
+        // Reset button states
+        document.getElementById('conv-submit-btn').style.display = 'block';
+        document.getElementById('conv-submit-btn').disabled = false;
+        document.getElementById('conv-next-btn').style.display = 'none';
+        
+        let initialMessage = "";
+        
+        if (phase === 'PRE_BATTLE_1') {
+            initialMessage = "General, it's time for our first battle! The troops are ready. Please give them some words of encouragement before we march!";
+            document.getElementById('conv-input').placeholder = "e.g. Brave warriors, fear nothing and march forward!";
+        } else if (phase === 'POST_BATTLE_1') {
+            initialMessage = "We did it! A glorious victory! ...But wait, I sense enemy reinforcements approaching!";
+            document.getElementById('conv-input').placeholder = "e.g. Don't let your guard down, hold the line!";
+        } else if (phase === 'PRE_BATTLE_2') {
+            initialMessage = "The reinforcements are... a giant Oni-Musha! We'll be wiped out if we face it head-on. What are your orders!?";
+            document.getElementById('conv-input').placeholder = "e.g. It's slow! Scatter and attack from both sides!";
+        }
+        
+        addLog('general', initialMessage);
+        setTimeout(() => document.getElementById('conv-input').focus(), 100);
+    }
+
+    function addLog(speaker, text) {
+        const logArea = document.getElementById('conv-log-area');
+        const div = document.createElement('div');
+        div.className = 'log-entry ' + (speaker === 'player' ? 'log-player' : 'log-general');
+        
+        const name = speaker === 'player' ? 'General (You)' : GameState.selectedGeneral.name;
+        div.innerHTML = `<b style="font-size:12px; opacity:0.8;">${name}</b><br>${text}`;
+        
+        logArea.appendChild(div);
+        logArea.scrollTop = logArea.scrollHeight;
+    }
+
+    // Player speaks
+    window.submitConversation = async function() {
+        const rawText = document.getElementById('conv-input').value.trim();
+        if (!rawText) return;
+        
+        // Disable input while communicating
+        document.getElementById('conv-input').value = '';
+        document.getElementById('conv-input').disabled = true;
+        
+        const submitBtn = document.getElementById('conv-submit-btn');
+        submitBtn.disabled = true;
+        submitBtn.innerText = 'Translating & Thinking...';
+        
+        // --- Wait for Mock AI Processing ---
+        await new Promise(r => setTimeout(r, 1500));
+        
+        // Random Evaluation
+        const sitFit = Math.floor(Math.random() * 100); 
+        const isBad = sitFit < 40;
+        
+        // Mock translated player text (Assume returned from JSON)
+        const translatedPlayerText = `(Translated) "${rawText}"`;
+        
+        // Add translated text to the log
+        addLog('player', translatedPlayerText);
+
+        let reply = "";
+        let memoryAdd = "";
+        const nextBtn = document.getElementById('conv-next-btn');
+        
+        if (GameState.currentPhase === 'PRE_BATTLE_1') {
+            reply = isBad ? "...Can we really win with that? I'm worried, but I will obey." : "Understood! Your words have strengthened our resolve. Let's go!";
+            memoryAdd = `Pre-battle 1: Ordered "${translatedPlayerText.replace('(Translated) ', '').substring(0, 15)}..."`;
+            applyDummyBuffs(isBad);
+            nextBtn.innerText = 'March to Battle';
+            GameState.nextPhaseTarget = 'BATTLE_1';
+        } 
+        else if (GameState.currentPhase === 'POST_BATTLE_1') {
+            reply = "Understood! Everyone, you heard the General! Stay sharp!";
+            memoryAdd = `Post-battle 1: Said "${translatedPlayerText.replace('(Translated) ', '').substring(0, 15)}..."`;
+            // No buffs applied between waves
+            nextBtn.innerText = 'Check Reinforcements';
+            GameState.nextPhaseTarget = 'PRE_BATTLE_2';
+        } 
+        else if (GameState.currentPhase === 'PRE_BATTLE_2') {
+            reply = isBad ? "I don't think we can win against that giant... We have no choice but to fight to the death!" : "With our bond and your command, we fear no enemy! All forces, charge!";
+            memoryAdd = `Final Battle: Shouted "${translatedPlayerText.replace('(Translated) ', '').substring(0, 15)}..."`;
+            applyDummyBuffs(isBad);
+            nextBtn.innerText = 'Final Battle';
+            GameState.nextPhaseTarget = 'BATTLE_2';
+        }
+        
+        // Switch face image based on evaluation
+        const gen = GameState.selectedGeneral;
+        document.getElementById('conv-char-img').src = isBad ? Assets[gen.faceScared].src : Assets[gen.faceBrave].src;
+
+        // Update Memory
+        GameState.generalMemory += (GameState.generalMemory ? " / " : "") + memoryAdd;
+        document.getElementById('conv-char-memory').innerText = GameState.generalMemory;
+        
+        // Add response log
+        addLog('general', reply);
+        
+        // Toggle buttons
+        submitBtn.style.display = 'none';
+        nextBtn.style.display = 'block';
+    };
+
+    window.goToNextPhase = function() {
+        changePhase(GameState.nextPhaseTarget);
+    };
+
+    function applyDummyBuffs(isBad) {
+        if (isBad) {
+            GameState.currentBuffs = { atkMult: 0.5, spdMult: 0.5, defBuff: -30, buffType: 'down' };
+            GameState.currentTactic = 'NORMAL';
+        } else {
+            const tactics = ['CHARGE', 'DEFEND', 'SPLIT'];
+            const tactic = tactics[Math.floor(Math.random() * tactics.length)];
+            GameState.currentTactic = tactic;
+            
+            if (tactic === 'DEFEND') {
+                GameState.currentBuffs = { atkMult: 1.2, spdMult: 1.0, defBuff: 50, buffType: 'def_up' };
+            } else {
+                GameState.currentBuffs = { atkMult: 2.0, spdMult: 2.0, defBuff: 10, buffType: 'up' };
+            }
+        }
+    }
+
+
+    // --- Canvas Battle Processing ---
+    
+    class Unit {
+        constructor(config) {
+            this.x = config.x; this.y = config.y;
+            this.isAlly = config.isAlly; this.isBoss = config.isBoss || false;
+            
+            this.radius = config.radius || (this.isBoss ? 40 : 15);
+            this.color = this.isAlly ? '#3498db' : (this.isBoss ? '#c0392b' : '#e74c3c');
+            
+            if (this.isAlly) this.image = Assets.ally;
+            else if (this.isBoss) this.image = Assets.boss;
+            else this.image = Assets.enemy;
+            
+            this.maxHp = config.hp || 100;
+            this.hp = this.maxHp;
+            this.attackDamage = config.damage || 10;
+            this.speed = config.speed || 1.5;
+            this.attackRange = this.radius + 15;
+            this.attackCooldown = config.cooldown || 1000;
+            this.damageReduction = 0;
+            
+            this.lastAttackTime = 0;
+            this.target = null;
+            this.hitEffectTimer = 0;
+            this.buffType = null;
+        }
+
+        update(deltaTime) {
+            if (this.hp <= 0) return;
+            if (this.hitEffectTimer > 0) this.hitEffectTimer -= deltaTime;
+
+            const enemies = GameState.units.filter(u => u.isAlly !== this.isAlly && u.hp > 0);
+            const allies = GameState.units.filter(u => u.isAlly && u.hp > 0);
+            const myIndex = allies.indexOf(this);
+            
+            let minDist = Infinity;
+            this.target = null;
+            for (let enemy of enemies) {
+                const dist = Math.hypot(this.x - enemy.x, this.y - enemy.y);
+                if (dist < minDist) { minDist = dist; this.target = enemy; }
+            }
+
+            let targetX = this.x; let targetY = this.y;
+            let currentSpeed = this.speed; let isDefending = false;
+
+            if (this.isAlly) {
+                if (GameState.currentTactic === 'CHARGE') { currentSpeed = this.speed * 1.5; } 
+                else if (GameState.currentTactic === 'DEFEND') {
+                    const spacing = 45;
+                    const startY = (canvas.height - (allies.length - 1) * spacing) / 2;
+                    targetX = 350; targetY = startY + myIndex * spacing;
+                    isDefending = true;
+                } 
+                else if (GameState.currentTactic === 'SPLIT') {
+                    targetY = (myIndex % 2 === 0) ? 60 : canvas.height - 60;
+                    targetX = this.x + 100;
+                }
+            }
+
+            if (!this.target) {
+                if (this.isAlly) {
+                    if (isDefending) {
+                        const dx = targetX - this.x; const dy = targetY - this.y;
+                        const dist = Math.hypot(dx, dy);
+                        if (dist > 5) {
+                            this.x += (dx / dist) * currentSpeed * (deltaTime / 16);
+                            this.y += (dy / dist) * currentSpeed * (deltaTime / 16);
+                        }
+                    } else if (GameState.currentTactic === 'SPLIT') {
+                        const dy = targetY - this.y;
+                        if (Math.abs(dy) > 5) this.y += Math.sign(dy) * currentSpeed * 0.5 * (deltaTime / 16);
+                        if (this.x < canvas.width - 150) this.x += currentSpeed * (deltaTime / 16);
+                    } else {
+                        if (this.x < canvas.width - 150) this.x += currentSpeed * (deltaTime / 16);
+                    }
+                } else {
+                    this.x -= this.speed * (deltaTime / 16);
+                }
+            } else {
+                let shouldChase = true;
+                if (isDefending && minDist > this.attackRange + 80) {
+                    shouldChase = false;
+                    const dx = targetX - this.x; const dy = targetY - this.y;
+                    const dist = Math.hypot(dx, dy);
+                    if (dist > 5) {
+                        this.x += (dx / dist) * currentSpeed * (deltaTime / 16);
+                        this.y += (dy / dist) * currentSpeed * (deltaTime / 16);
+                    }
+                }
+
+                if (shouldChase) {
+                    if (minDist > this.attackRange) {
+                        const dx = this.target.x - this.x; const dy = this.target.y - this.y;
+                        if (this.isAlly && GameState.currentTactic === 'SPLIT') {
+                            const biasY = targetY - this.y;
+                            this.x += (dx / minDist) * currentSpeed * (deltaTime / 16);
+                            this.y += ((dy / minDist) + Math.sign(biasY) * 0.8) * currentSpeed * 0.7 * (deltaTime / 16);
+                        } else {
+                            this.x += (dx / minDist) * currentSpeed * (deltaTime / 16);
+                            this.y += (dy / minDist) * currentSpeed * (deltaTime / 16);
+                        }
+                    } else {
+                        if (GameState.gameTime - this.lastAttackTime >= this.attackCooldown) {
+                            const reduction = this.target.damageReduction || 0;
+                            const finalDamage = Math.max(1, this.attackDamage * (1 - reduction / 100));
+                            
+                            this.target.hp -= finalDamage;
+                            this.target.hitEffectTimer = 150;
+                            this.lastAttackTime = GameState.gameTime;
+                            
+                            GameState.damageTexts.push({
+                                x: this.target.x + (Math.random() * 20 - 10),
+                                y: this.target.y - this.target.radius - 10,
+                                text: `-${Math.floor(finalDamage)}`,
+                                life: 1000, maxLife: 1000
+                            });
+                            
+                            this.x += (this.isAlly ? 5 : -5);
+                            setTimeout(() => this.x -= (this.isAlly ? 5 : -5), 50);
+                        }
+                    }
+                }
+            }
+            this.y = Math.max(this.radius, Math.min(canvas.height - this.radius - 60, this.y));
+        }
+
+        draw(ctx) {
+            ctx.save();
+            if (this.hitEffectTimer > 0) ctx.filter = 'brightness(200%)';
+
+            let bounceY = 0; let rotation = 0;
+            if (this.hp > 0 && GameState.gameStatus === 'playing') {
+                bounceY = Math.abs(Math.sin(GameState.gameTime / 800 + this.x)) * 8; 
+                rotation = Math.sin(GameState.gameTime / 1000 + this.x) * 0.1;
+            }
+
+            ctx.translate(this.x, this.y - bounceY);
+            ctx.rotate(rotation);
+
+            if (this.image && this.image.complete && this.image.naturalWidth !== 0) {
+                const drawScale = 1.8;
+                const scaledRadius = this.radius * drawScale;
+                ctx.drawImage(this.image, -scaledRadius, -scaledRadius, scaledRadius * 2, scaledRadius * 2);
+            } else {
+                ctx.beginPath(); ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = this.color; ctx.fill();
+                ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.stroke();
+            }
+            ctx.restore();
+
+            if (this.buffType) {
+                ctx.textAlign = 'center'; ctx.font = 'bold 16px sans-serif';
+                const iconY = this.y - this.radius * 2.2 - bounceY;
+                ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                const txt = this.buffType === 'down' ? '💀 DOWN' : (this.buffType === 'def_up' ? '🛡️ UP' : '⚔️ UP');
+                ctx.fillText(txt, this.x + 1, iconY + 1);
+                
+                ctx.fillStyle = this.buffType === 'down' ? '#9b59b6' : (this.buffType === 'def_up' ? '#3498db' : '#e74c3c');
+                ctx.fillText(txt, this.x, iconY);
+            }
+
+            const hpWidth = 40; const hpHeight = 6;
+            const hpX = this.x - hpWidth / 2; const hpY = this.y - this.radius - 12;
+            ctx.fillStyle = '#333'; ctx.fillRect(hpX, hpY, hpWidth, hpHeight);
+            
+            const hpPercent = Math.max(0, this.hp / this.maxHp);
+            ctx.fillStyle = hpPercent > 0.5 ? '#2ecc71' : (hpPercent > 0.2 ? '#f1c40f' : '#e74c3c');
+            ctx.fillRect(hpX, hpY, hpWidth * hpPercent, hpHeight);
+            ctx.strokeStyle = '#000'; ctx.strokeRect(hpX, hpY, hpWidth, hpHeight);
+        }
+    }
+
+    function startBattle(wave) {
+        GameState.units = [];
+        GameState.damageTexts = [];
+        GameState.gameTime = 0;
+        GameState.wave = wave;
+        GameState.gameStatus = 'starting';
+        GameState.stateStartTime = performance.now();
+        GameState.isPaused = false;
+        
+        const buffs = GameState.currentBuffs;
+
+        if (wave === 1) {
+            waveInfo.innerText = "Wave 1 - Battle Start";
+            for (let i = 0; i < 5; i++) {
+                GameState.units.push(new Unit({ x: 80, y: 100 + i * 65, isAlly: true, hp: 100, damage: 20, speed: 1.0 }));
+            }
+            for (let i = 0; i < 2; i++) {
+                GameState.units.push(new Unit({ x: 700, y: 180 + i * 100, isAlly: false, hp: 250, damage: 15, speed: 2.5 }));
+            }
+        } else if (wave === 2) {
+            waveInfo.innerText = "Wave 2 - Giant Boss Appeared";
+            for (let i = 0; i < 5; i++) {
+                GameState.units.push(new Unit({ x: -50 - (i * 30), y: 100 + i * 65, isAlly: true, hp: 100, damage: 20, speed: 1.2 }));
+            }
+            for (let i = 0; i < 2; i++) {
+                GameState.units.push(new Unit({ x: 850 + (i * 80), y: 150 + i * 150, isAlly: false, isBoss: true, radius: 40, hp: 1500, damage: 40, speed: 1.25 }));
+            }
+        }
+        
+        // Apply Buffs
+        GameState.units.filter(u => u.isAlly).forEach(u => {
+            u.attackDamage = Math.max(1, u.attackDamage * buffs.atkMult);
+            u.speed = Math.max(0.2, u.speed * buffs.spdMult);
+            u.damageReduction += buffs.defBuff;
+            u.buffType = buffs.buffType;
+        });
+    }
+
+    function drawBackground() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        if (Assets.bg && Assets.bg.complete && Assets.bg.naturalWidth !== 0) {
+            ctx.drawImage(Assets.bg, 0, 0, canvas.width, canvas.height);
+        }
+    }
+
+    function gameLoop(timestamp) {
+        if (!GameState.lastTimestamp) GameState.lastTimestamp = timestamp;
+        
+        if (!GameState.isPaused && GameState.gameStatus === 'playing') {
+            const deltaTime = timestamp - GameState.lastTimestamp;
+            GameState.gameTime += deltaTime;
+
+            GameState.units = GameState.units.filter(u => u.hp > 0);
+            const allies = GameState.units.filter(u => u.isAlly);
+            const enemies = GameState.units.filter(u => !u.isAlly);
+
+            // Transition based on victory/defeat
+            if (allies.length === 0) {
+                GameState.gameStatus = 'lose';
+            } else if (enemies.length === 0) {
+                if (GameState.wave === 1) {
+                    GameState.gameStatus = 'transition';
+                    setTimeout(() => changePhase('POST_BATTLE_1'), 1500); 
+                } else if (GameState.wave === 2) {
+                    GameState.gameStatus = 'win';
+                    setTimeout(() => changePhase('RESULT'), 1500);
+                }
+            }
+
+            GameState.units.forEach(unit => unit.update(deltaTime));
+        }
+
+        drawBackground();
+        GameState.units.sort((a, b) => a.y - b.y).forEach(unit => unit.draw(ctx));
+
+        for (let i = GameState.damageTexts.length - 1; i >= 0; i--) {
+            let dt = GameState.damageTexts[i];
+            const deltaTime = timestamp - GameState.lastTimestamp;
+            if (!GameState.isPaused) {
+                dt.life -= deltaTime;
+                dt.y -= 30 * (deltaTime / 1000); 
+            }
+            if (dt.life <= 0) { GameState.damageTexts.splice(i, 1); continue; }
+            
+            const alpha = Math.max(0, dt.life / dt.maxLife);
+            ctx.fillStyle = `rgba(231, 76, 60, ${alpha})`;
+            ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
+            ctx.lineWidth = 3; ctx.font = 'bold 24px sans-serif'; ctx.textAlign = 'center';
+            ctx.strokeText(dt.text, dt.x, dt.y); ctx.fillText(dt.text, dt.x, dt.y);
+        }
+
+        if (GameState.gameStatus === 'starting') {
+            const elapsed = timestamp - GameState.stateStartTime;
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#f1c40f'; ctx.strokeStyle = '#c0392b'; ctx.lineWidth = 4;
+            ctx.font = 'bold 80px sans-serif'; ctx.textAlign = 'center';
+            
+            const scale = Math.min(1.2, 0.5 + (elapsed / 1000));
+            ctx.save(); ctx.translate(canvas.width / 2, canvas.height / 2); ctx.scale(scale, scale);
+            ctx.strokeText('BATTLE START!', 0, 0); ctx.fillText('BATTLE START!', 0, 0); ctx.restore();
+
+            if (elapsed > 2000) GameState.gameStatus = 'playing';
+        } else if (GameState.gameStatus === 'win') {
+            ctx.fillStyle = 'rgba(255, 215, 0, 0.3)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#f1c40f'; ctx.strokeStyle = '#d35400'; ctx.lineWidth = 5;
+            ctx.font = 'bold 80px sans-serif'; ctx.textAlign = 'center';
+            ctx.strokeText('VICTORY', canvas.width / 2, canvas.height / 2); ctx.fillText('VICTORY', canvas.width / 2, canvas.height / 2);
+        } else if (GameState.gameStatus === 'lose') {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#e74c3c'; ctx.strokeStyle = '#c0392b'; ctx.lineWidth = 5;
+            ctx.font = 'bold 80px sans-serif'; ctx.textAlign = 'center';
+            ctx.strokeText('DEFEAT', canvas.width / 2, canvas.height / 2); ctx.fillText('DEFEAT', canvas.width / 2, canvas.height / 2);
+        }
+
+        GameState.lastTimestamp = timestamp;
+        requestAnimationFrame(gameLoop);
+    }
+
+    // Entry point
+    loadAssets().then(() => {
+        requestAnimationFrame(gameLoop);
+    });
+
+</script>
+</body>
+</html>
